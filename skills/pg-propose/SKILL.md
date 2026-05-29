@@ -94,7 +94,7 @@ EOF
 ### 2b. 获取配置上下文
 
 ```bash
-python3 .opencode/scripts/pg-parse-config.py pg-propose > /tmp/pg-config.json
+python3 {scriptsDir}/pg-parse-config.py pg-propose > /tmp/pg-config.json
 ```
 
 从输出 JSON 获取：

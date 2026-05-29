@@ -26,7 +26,7 @@ metadata:
 此 SKILL 读取 `pg-spec/config.yaml`，在 Phase 0 开头执行：
 
 ```bash
-python3 .opencode/scripts/pg-parse-config.py pg-micro-change > /tmp/pg-config.json
+python3 {scriptsDir}/pg-parse-config.py pg-micro-change > /tmp/pg-config.json
 ```
 
 输出包含 `backend`、`frontend`、`openapi`、`git` 四个配置块，各阶段通过 `{key}` 占位符引用。
@@ -87,7 +87,7 @@ Phase 0: 快速规划  ─→  用户确认  ─→  Phase A / B / C / D / E / F
 在执行任何 Read/Edit/Write/Bash（仅用于读取配置的 Bash 除外）之前，先填充以下自检表：
 
 ```
-- [ ] `python3 .opencode/scripts/pg-parse-config.py pg-micro-change > /tmp/pg-config.json` 是否已执行？
+- [ ] `python3 {scriptsDir}/pg-parse-config.py pg-micro-change > /tmp/pg-config.json` 是否已执行？
 - [ ] 变更涉及哪些文件（列出绝对路径）？
 - [ ] 本次变更是否需要修改生产代码？
 - [ ] 本次变更是否需要修改测试代码？
@@ -100,7 +100,7 @@ Phase 0: 快速规划  ─→  用户确认  ─→  Phase A / B / C / D / E / F
 #### 步骤 0.1：读取配置
 
 ```bash
-python3 .opencode/scripts/pg-parse-config.py pg-micro-change > /tmp/pg-config.json
+python3 {scriptsDir}/pg-parse-config.py pg-micro-change > /tmp/pg-config.json
 ```
 
 从输出 JSON 读取后续所需的所有配置值（backend、frontend、openapi 各键）。

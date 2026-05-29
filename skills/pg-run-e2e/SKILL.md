@@ -106,20 +106,20 @@ mkdir -p temp && rm -f temp/e2e-test-output.log temp/phase1-failures.json temp/p
 
 #### 1.2 按脚本分组失败用例
 
-使用 `pg-e2e-parse-results.py` 自动解析：
+使用 `{scriptsDir}/pg-e2e-parse-results.py` 自动解析：
 
 ```bash
-python3 .opencode/scripts/pg-e2e-parse-results.py parse --log-file temp/e2e-test-output.log --out temp/phase1-failures.json
+python3 {scriptsDir}/pg-e2e-parse-results.py parse --log-file temp/e2e-test-output.log --out temp/phase1-failures.json
 ```
 
 如果 `summary.failed == 0` → 跳转到 Phase 3
 
 #### 1.3 读取 KnownIssues.md
 
-使用 `pg-e2e-parse-results.py` 提取跳过列表：
+使用 `{scriptsDir}/pg-e2e-parse-results.py` 提取跳过列表：
 
 ```bash
-python3 .opencode/scripts/pg-e2e-parse-results.py known-issues --path <knownIssues.path> --out temp/phase1-known-issues.json
+python3 {scriptsDir}/pg-e2e-parse-results.py known-issues --path <knownIssues.path> --out temp/phase1-known-issues.json
 ```
 
 仅从 `## Active Known Issues` 区域提取，忽略 `## Fix History`。这些脚本跳过 fix-e2e 调用。
@@ -244,7 +244,7 @@ pg-run-e2e/fix-e2e，请诊断并修复以下 E2E 测试脚本的失败问题：
 #### 3.2 脚本自动更新 KnownIssues.md
 
 ```bash
-python3 .opencode/scripts/pg-e2e-parse-results.py update-known-issues \
+python3 {scriptsDir}/pg-e2e-parse-results.py update-known-issues \
   --ki-path <knownIssues.path> \
   --fix-results temp/fix-results.json
 ```

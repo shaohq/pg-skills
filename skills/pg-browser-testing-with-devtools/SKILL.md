@@ -19,7 +19,7 @@ metadata:
 此 SKILL 读取 `pg-spec/config.yaml` 获取前端配置：
 
 ```bash
-python3 .opencode/scripts/pg-parse-config.py pg-micro-change > /tmp/pg-config.json
+python3 {scriptsDir}/pg-parse-config.py pg-micro-change > /tmp/pg-config.json
 ```
 
 | 配置键 | 用途 | 来自 |
