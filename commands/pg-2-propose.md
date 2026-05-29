@@ -1,0 +1,13 @@
+---
+name: 2-pg-propose
+description: 2. 根据 explore 结果，提出新的变更——一次性创建并生成所有产物
+trigger: slash
+---
+
+# Pg Propose
+
+**技能**: `pg-propose`
+
+**用法**: `/2-pg-propose [变更名称]`
+
+**使用 Skill 工具加载 `pg-propose` 技能，并遵循其工作流。**

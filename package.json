@@ -1,0 +1,6 @@
+{
+  "name": "@company/pg-skills",
+  "version": "0.1.0",
+  "private": true,
+  "description": "PG workflow skills, agents, and commands for OpenCode"
+}
