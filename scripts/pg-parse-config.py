@@ -10,8 +10,10 @@ Usage:
   python3 pg-parse-config.py                          # Full config (debug)
   python3 pg-parse-config.py --key backend.port       # Single value
   python3 pg-parse-config.py --prefix backend         # Subtree as JSON
+  python3 pg-parse-config.py <workflow> --project-dir <path>  # Specify project root
 """
 
+import argparse
 import json
 import os
 import sys
@@ -22,10 +24,17 @@ except ImportError:
     print('{"error": "PyYAML is required. Install with: pip install pyyaml"}', file=sys.stderr)
     sys.exit(1)
 
-CONFIG_PATH = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)),
-    "../../pg-spec/config.yaml",
-)
+
+def parse_args(argv):
+    parser = argparse.ArgumentParser()
+    parser.add_argument("workflow", nargs="?", help="Workflow name to filter config")
+    parser.add_argument("--key", help="Get a single config value by dot path")
+    parser.add_argument("--prefix", help="Get a config subtree by key")
+    parser.add_argument("--project-dir", default=os.getcwd(), help="Project root directory")
+    return parser.parse_args(argv[1:])
+
+
+CONFIG_PATH = os.path.join(os.getcwd(), "pg-spec/config.yaml")
 
 # Each workflow only gets the top-level config keys it needs.
 # Add new entries when creating pg-* SKILLs.
@@ -69,32 +78,25 @@ def inject_meta(data):
 
 
 def main():
+    args = parse_args(sys.argv)
+
+    # Resolve config path relative to project-dir
+    global CONFIG_PATH
+    CONFIG_PATH = os.path.join(args.project_dir, "pg-spec/config.yaml")
+
     data = load()
-    args = sys.argv[1:]
 
-    if not args:
-        print(json.dumps(inject_meta(data), indent=2, ensure_ascii=False))
-        return
-
-    # First positional arg as workflow name
-    if args[0] in WORKFLOW_KEYS:
-        filtered = filter_by_workflow(data, args[0])
+    if args.workflow:
+        filtered = filter_by_workflow(data, args.workflow)
         print(json.dumps(inject_meta(filtered), indent=2, ensure_ascii=False))
-        return
-
-    i = 0
-    while i < len(args):
-        if args[i] == "--key" and i + 1 < len(args):
-            val = get_by_path(data, args[i + 1])
-            print(json.dumps(val, ensure_ascii=False))
-            i += 2
-        elif args[i] == "--prefix" and i + 1 < len(args):
-            val = get_by_path(data, args[i + 1])
-            print(json.dumps(val, ensure_ascii=False))
-            i += 2
-        else:
-            print(json.dumps({"error": f"Unknown argument: {args[i]}"}, ensure_ascii=False))
-            i += 1
+    elif args.key:
+        val = get_by_path(data, args.key)
+        print(json.dumps(val, ensure_ascii=False))
+    elif args.prefix:
+        val = get_by_path(data, args.prefix)
+        print(json.dumps(val, ensure_ascii=False))
+    else:
+        print(json.dumps(inject_meta(data), indent=2, ensure_ascii=False))
 
 
 if __name__ == "__main__":
