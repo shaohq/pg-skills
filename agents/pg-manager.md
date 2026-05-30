@@ -27,7 +27,7 @@ permission:
 - 支持两种执行模式：
   - **Skill 驱动**：使用 Skill tool 加载 SKILL，按 SKILL 定义的工作流执行
   - **Workflow 文件驱动**：读取 `.opencode/workflows/<workflow>.md` 按定义执行
-- 按定义依次执行各 phase，使用 `pg_dispatch_agent` tool 派遣子 agent
+- 按定义依次执行各 phase，使用 Task 工具派遣子 agent
 - 管理 context-chain.md 和 tasks.md 的状态更新
 - 在验证失败时决定直接修复还是回退
 
@@ -77,7 +77,7 @@ permission:
 命令体指示加载 SKILL（如 `pg-apply`）。执行步骤：
 
 1. **加载 SKILL**：使用 Skill tool 加载命令指定的 SKILL
-2. **按 SKILL 执行**：按 SKILL 定义的工作流依次执行各个 phase。SKILL 内部会调用 `{scriptsDir}/pg-parse-config.py <workflow-name>` 获取配置（`scriptsDir` 从 `pg-spec/config.yaml` 的 `scripts.dir` 读取）。需要派遣子 agent 时，使用 `pg_dispatch_agent` tool。
+2. **按 SKILL 执行**：按 SKILL 定义的工作流依次执行各个 phase。SKILL 内部会调用 `{scriptsDir}/pg-parse-config.py <workflow-name>` 获取配置（`scriptsDir` 从 `pg-spec/config.yaml` 的 `scripts.dir` 读取）。需要派遣子 agent 时，使用 Task 工具。
 3. **管理状态**：更新 context-chain.md 和 tasks.md
 4. **输出报告**：如实汇报每个 phase 结果
 
