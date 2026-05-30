@@ -66,21 +66,18 @@ function readModelConfig(projectDir) {
   return models;
 }
 
-/** Poll session status until completed or timeout. */
-async function waitForCompletion(sessionID, client, maxSec = 300) {
-  for (let i = 0; i < maxSec; i++) {
+/** Poll session status until completed (no hard timeout). */
+async function waitForCompletion(sessionID, client) {
+  for (;;) {
     const res = await client.session.status({ path: { id: sessionID } });
-    const data = res.data;
-    // Response format: { "<sessionID>": { type: "idle"|"busy"|"retry" } }
-    const status = data?.[sessionID] || data;
-    const type = status.type || status?.status;
-    if (type === "idle") return data;
-    if (type === "aborted" || type === "error") {
+    const status = res.data?.[sessionID] || res.data;
+    const type = status?.type || status?.status;
+    if (type === "idle") return;
+    if (type === "error" || type === "aborted") {
       throw new Error(`Session ${sessionID} ended with status: ${type}`);
     }
     await new Promise((r) => setTimeout(r, 1000));
   }
-  throw new Error(`Session ${sessionID} timed out after ${maxSec}s`);
 }
 
 /** Read the last assistant text response from a session. */
