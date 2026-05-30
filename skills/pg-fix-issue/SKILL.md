@@ -10,7 +10,7 @@ metadata:
 
 # pg-fix-issue
 
-用户描述问题后，主 agent 先规划问题复现步骤，然后调用 `pg-fix-issue/coder` agent 复现问题、收集错误信息、进行系统化诊断、对根因进行修复，coder 返回修复报告，主 agent 检查修复结果并按模板输出最终结论。
+用户描述问题后，编排器使用 `pg_dispatch_agent` tool 派遣 `pg-fix-issue/coder` agent 复现问题、收集错误信息、进行系统化诊断、对根因进行修复，coder 返回修复报告后编排器检查结果并按模板输出最终结论。
 
 ## 前置条件
 
@@ -36,13 +36,19 @@ frontend:
   lint: <lint-command>          # lint 命令
 ```
 
-### 2. 子 agent 定义
+### 2. 配置上下文
 
-此 SKILL 期望以下子 agent 存在：
+编排器需从 `pg-spec/config.yaml` 读取配置，通过 `{scriptsDir}/pg-parse-config.py <workflow>` 获取统一配置 JSON，然后提取 `backend`、`frontend` 等配置块。
 
-| Agent | 角色 |
-|-------|------|
-| `pg-fix-issue/coder` | 复现问题、执行诊断并修复、输出修复报告 |
+`pg_dispatch_agent` tool 的 `context` 参数接收配置上下文的 JSON 字符串：
+
+```json
+{
+  "backend": { "root": "webvirt-backend", "port": 9080, ... },
+  "frontend": { "root": "webvirt-frontend", "port": 3008, ... },
+  "scriptsDir": ".opencode/scripts"
+}
+```
 
 ---
 
@@ -62,7 +68,7 @@ frontend:
 │  ⚠️ 必须收到用户明确回复后才能继续！        │
 └───────────────────────────────────────────┘
     ↓
-┌─ Task: 派遣 pg-fix-issue/coder agent ────┐
+┌─ pg_dispatch_agent: 派遣 coder agent ────┐
 │  prompt中包含：问题+预期+步骤+配置上下文    │
 └───────────────────────────────────────────┘
     ↓
@@ -134,41 +140,30 @@ question 工具调用：
 
 **必须等待用户明确回复确认，才能进入下一阶段。**
 
-### Phase 4: 派遣 pg-fix-issue/coder agent
+### Phase 4: 派遣 coder agent
 
-使用 Task 工具派遣 `pg-fix-issue/coder` agent，**在 prompt 中附带配置上下文**：
+使用 `pg_dispatch_agent` tool 派遣 coder agent，**在 task 参数中附带配置上下文**：
 
-```
-Task 工具调用：
-  - description: "复现问题并进行根因修复"
-  - prompt: |
-      FIX ISSUE REQUEST
+```text
+pg_dispatch_agent tool 调用：
+  agent_name: pg-fix-issue/coder
+  task: |
+    FIX ISSUE REQUEST
 
-      - issue_title: <问题标题>
-      - issue_description: <问题描述>
-      - expected_result: <预期结果描述>
-      - reproduction_steps: |
-          1. <步骤 1>
-          2. <步骤 2>
-          ⚠️ 重要：必须真实执行以下步骤，不得以阅读代码代替！
+    - issue_title: <问题标题>
+    - issue_description: <问题描述>
+    - expected_result: <预期结果描述>
+    - reproduction_steps: |
+        1. <步骤 1>
+        2. <步骤 2>
+        ⚠️ 重要：必须真实执行以下步骤，不得以阅读代码代替！
 
-      CONFIG CONTEXT
-      - backend.root: {backend.root}
-      - backend.port: {backend.port}
-      - backend.start: {backend.start}
-      - backend.health-check: {backend.health-check}
-      - backend.lint: {backend.lint}
-      - frontend.root: {frontend.root}
-      - frontend.port: {frontend.port}
-      - frontend.start: {frontend.start}
-      - frontend.health-check: {frontend.health-check}
-      - frontend.lint: {frontend.lint}
-
-      请执行问题复现、诊断、修复并验证修复结果。
-   - subagent_type: "pg-fix-issue/coder"
+    ────────────────────────────────────────
+    请执行问题复现、诊断、修复并验证修复结果。
+  context: '{{ 从 pg-parse-config.py 输出的 JSON 中提取的 backend、frontend 等配置 }}'
 ```
 
-注：`{backend.root}` 等占位符由编排器在调用前替换为实际配置值。
+注：`context` 参数为 JSON 字符串，包含 `backend`、`frontend`、`scriptsDir` 等配置值。编排器在执行 `{scriptsDir}/pg-parse-config.py <workflow>` 后，将输出的 JSON 中的 `backend`、`frontend` 等块序列化为字符串传入。
 
 ### Phase 5: 检查修复结果（两步验证法）
 

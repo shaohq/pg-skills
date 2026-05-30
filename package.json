@@ -4,5 +4,8 @@
   "private": true,
   "type": "module",
   "main": ".opencode/plugins/pg.js",
-  "description": "PG workflow skills, agents, and commands for OpenCode"
+  "description": "PG workflow skills, agents, and commands for OpenCode",
+  "dependencies": {
+    "@opencode-ai/plugin": "^1.15.4"
+  }
 }
