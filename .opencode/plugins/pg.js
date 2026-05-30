@@ -98,6 +98,15 @@ function ensureProjectFiles(projectDir) {
       fs.copyFileSync(templatePath, modelConfigPath);
     }
   }
+
+  // config.yaml
+  const configPath = path.join(pgSpecDir, "config.yaml");
+  if (!fs.existsSync(configPath)) {
+    const templatePath = path.join(pgRoot, "scripts", "config.default.yaml");
+    if (fs.existsSync(templatePath)) {
+      fs.copyFileSync(templatePath, configPath);
+    }
+  }
 }
 
 export const PgSkillsPlugin = async (input) => {

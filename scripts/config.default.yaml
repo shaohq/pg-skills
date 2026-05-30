@@ -1,0 +1,27 @@
+schema: spec-driven
+
+# ==========================================
+# Unified configuration for pg-* SKILLs
+# Read by pg-parse-config.py (from pg-skills plugin)
+# All SKILLs declare their needs; manager injects values at runtime.
+# ==========================================
+
+backend:
+  root: <backend-dir>
+  port: 9080
+  compile: mvn test-compile -q
+  test: mvn test
+  lint: mvn checkstyle:check
+  start: echo "Add your backend start command here"
+  health-check: curl http://localhost:<port>/api/health
+
+frontend:
+  root: <frontend-dir>
+  port: 3008
+  test: pnpm test
+  lint: pnpm lint:eslint
+  start: echo "Add your frontend start command here"
+  health-check: curl http://localhost:<port>/
+
+git:
+  default-branch: master
