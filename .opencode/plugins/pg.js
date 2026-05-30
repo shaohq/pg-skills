@@ -3,35 +3,68 @@
  *
  * Registers pg-* skills path and provides the pg_dispatch tool
  * for dispatching sub-agents defined in agent-defs/.
+ * Config parsing (pg-spec/config.yaml) is handled internally.
  */
 import path from "path";
 import fs from "fs";
+import { execFileSync } from "child_process";
 import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const pgRoot = path.resolve(__dirname, "../..");
 
-/** Parse simple YAML-like flat key: value pairs. */
-function parseSimpleYaml(content) {
-  const result = {};
-  for (const line of content.split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-    const idx = trimmed.indexOf(":");
-    if (idx > 0) {
-      const key = trimmed.slice(0, idx).trim();
-      const value = trimmed.slice(idx + 1).trim();
-      if (key && value) result[key] = value;
+/** Parse nested YAML by indentation (covers pg-spec/config.yaml format). */
+function parseYaml(text) {
+  const lines = text.split("\n");
+  const root = {};
+  const stack = [{ indent: -1, obj: root }];
+
+  for (const raw of lines) {
+    const trimmed = raw.trimEnd();
+    if (!trimmed.trim() || trimmed.trim().startsWith("#")) continue;
+    const indent = trimmed.search(/\S|$/);
+    const content = trimmed.trim();
+    const colonIdx = content.indexOf(":");
+    if (colonIdx < 0) continue;
+    const key = content.slice(0, colonIdx).trim();
+    const val = content.slice(colonIdx + 1).trim();
+
+    // Pop stack back to correct indent level
+    while (stack.length > 1 && indent <= stack[stack.length - 1].indent) {
+      stack.pop();
+    }
+    let current = stack[stack.length - 1].obj;
+
+    if (val === "") {
+      const child = {};
+      current[key] = child;
+      stack.push({ indent, obj: child });
+    } else {
+      current[key] = val;
     }
   }
-  return result;
+  return root;
+}
+
+/** Read pg-spec/config.yaml from project and return parsed object. */
+function readProjectConfig(projectDir) {
+  const configPath = path.join(projectDir, "pg-spec", "config.yaml");
+  if (!fs.existsSync(configPath)) return {};
+  return parseYaml(fs.readFileSync(configPath, "utf-8"));
 }
 
 /** Read model config from pg-spec/config-model.yaml. */
 function readModelConfig(projectDir) {
-  const configPath = path.join(projectDir, "pg-spec", "config-model.yaml");
-  if (!fs.existsSync(configPath)) return {};
-  return parseSimpleYaml(fs.readFileSync(configPath, "utf-8"));
+  const modelPath = path.join(projectDir, "pg-spec", "config-model.yaml");
+  if (!fs.existsSync(modelPath)) return {};
+  const models = {};
+  for (const line of fs.readFileSync(modelPath, "utf-8").split("\n")) {
+    const t = line.trim();
+    if (!t || t.startsWith("#")) continue;
+    const i = t.indexOf(":");
+    if (i > 0) { const k = t.slice(0, i).trim(), v = t.slice(i + 1).trim(); if (k && v) models[k] = v; }
+  }
+  return models;
 }
 
 /** Poll session status until completed or timeout. */
@@ -50,17 +83,11 @@ async function waitForCompletion(sessionID, client, maxSec = 120) {
 
 /** Read the last assistant text response from a session. */
 async function getResultText(sessionID, client) {
-  const res = await client.session.messages({
-    path: { id: sessionID },
-    query: { limit: 50 },
-  });
+  const res = await client.session.messages({ path: { id: sessionID }, query: { limit: 50 } });
   const messages = res.data?.messages || res.data || [];
   for (let i = messages.length - 1; i >= 0; i--) {
-    const parts = messages[i].parts || [];
-    for (let j = parts.length - 1; j >= 0; j--) {
-      if (parts[j].type === "text" && parts[j].text) {
-        return parts[j].text;
-      }
+    for (const part of messages[i].parts || []) {
+      if (part.type === "text" && part.text) return part.text;
     }
   }
   return "(no text response from agent)";
@@ -93,6 +120,7 @@ export const PgSkillsPlugin = async (input) => {
   const projectDir = input.worktree || input.directory;
   const skillsDir = path.join(pgRoot, "skills");
   const agentDefsDir = path.join(pgRoot, "agent-defs");
+  const scriptsDir = path.join(pgRoot, "scripts");
   const client = input.client;
 
   return {
@@ -108,20 +136,18 @@ export const PgSkillsPlugin = async (input) => {
     tool: {
       pg_dispatch: {
         description:
-          "Dispatch a pg-* sub-agent. Reads the agent definition from the pg-skills package's agent-defs/ directory and model config from pg-spec/config-model.yaml.",
+          "Dispatch a pg-* sub-agent. Reads the agent definition from the pg-skills package, auto-injects project config from pg-spec/config.yaml, and uses model config from pg-spec/config-model.yaml.",
         args: {
           agent_name: { type: "string", description: "Agent identifier, e.g. 'pg-fix-issue/coder' or 'pg-apply-change/backend-dev'" },
           task: { type: "string", description: "The task description for the agent to execute" },
         },
         execute: async (args, ctx) => {
-          // Resolve agent definition file
           const agentParts = args.agent_name.split("/");
           const agentFile = path.join(agentDefsDir, ...agentParts) + ".md";
           if (!fs.existsSync(agentFile)) {
             return `Error: Agent "${args.agent_name}" not found at ${agentFile}`;
           }
 
-          // Read agent .md and parse frontmatter
           const content = fs.readFileSync(agentFile, "utf-8");
           const match = content.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
           const frontmatter = {};
@@ -133,38 +159,59 @@ export const PgSkillsPlugin = async (input) => {
           }
           const agentPrompt = (match ? match[2] : content).trim();
 
-          // Resolve model: config-model.yaml > frontmatter > undefined
+          // Model: config-model.yaml > frontmatter
           const modelConfig = readModelConfig(projectDir);
           const model = modelConfig[args.agent_name] || frontmatter.model || undefined;
 
-          // Build full prompt
-          const fullPrompt = [agentPrompt, "\n\n## Task\n" + args.task].join("\n");
+          // Auto-inject project config context
+          const projectConfig = readProjectConfig(projectDir);
+          const configBlock = Object.keys(projectConfig).length
+            ? "\n\n## Project Config\n" + JSON.stringify(projectConfig, null, 2)
+            : "";
 
-          // Create child session
+          const fullPrompt = [agentPrompt, configBlock, "\n\n## Task\n" + args.task].join("\n");
+
           const createRes = await client.session.create({
-            body: {
-              parentID: ctx.sessionID,
-              title: `pg:${args.agent_name}`,
-            },
+            body: { parentID: ctx.sessionID, title: `pg:${args.agent_name}` },
             query: { directory: projectDir },
           });
           const sessionID = createRes.data?.id || createRes.data?.sessionID;
-          if (!sessionID) {
-            return `Error: Failed to create session for "${args.agent_name}"`;
-          }
+          if (!sessionID) return `Error: Failed to create session for "${args.agent_name}"`;
 
-          // Send prompt with model
           if (typeof client.session.prompt === "function") {
             const promptBody = { parts: [{ type: "text", text: fullPrompt }] };
             if (model) promptBody.model = { id: model };
             await client.session.prompt({ path: { id: sessionID }, body: promptBody });
           }
 
-          // Wait for completion and read result
           await waitForCompletion(sessionID, client);
           const resultText = await getResultText(sessionID, client);
 
           return `${resultText}\n\n<task_metadata>\nsession_id: ${sessionID}\nagent: ${args.agent_name}\nmodel: ${model || "(default)"}\n</task_metadata>`;
+        },
+      },
+
+      pg_run_script: {
+        description: "Run a Python script from the pg-skills package's scripts/ directory. Returns stdout.",
+        args: {
+          script: { type: "string", description: "Script filename, e.g. 'pg-e2e-parse-results.py'" },
+          args_str: { type: "string", description: "Command-line arguments to pass to the script" },
+        },
+        execute: async (args, ctx) => {
+          const scriptPath = path.join(scriptsDir, args.script);
+          if (!fs.existsSync(scriptPath)) {
+            return `Error: Script "${args.script}" not found at ${scriptPath}`;
+          }
+          try {
+            const result = execFileSync("python3", [scriptPath, ...args.args_str.split(/\s+/)], {
+              cwd: projectDir,
+              encoding: "utf-8",
+              maxBuffer: 10 * 1024 * 1024,
+            });
+            return result;
+          } catch (e) {
+            return `Error running ${args.script}: ${e.stderr || e.message}`;
+          }
         },
       },
     },

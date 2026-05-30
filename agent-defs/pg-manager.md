@@ -48,7 +48,7 @@ permission:
 ### Skill 驱动
 
 1. **加载 SKILL**：使用 Skill tool 加载命令指定的 SKILL
-2. **按 SKILL 执行**：SKILL 内部会调用 `{scriptsDir}/pg-parse-config.py <workflow-name>` 获取配置。需要派遣子 agent 时，使用 `pg_dispatch` tool
+2. **按 SKILL 执行**：按 SKILL 定义的工作流依次执行各个 phase。`pg_dispatch` tool 会自动读取 `pg-spec/config.yaml` 并注入配置上下文到子 agent。无需手动执行配置解析。需要派遣子 agent 时，使用 `pg_dispatch` tool
 3. **管理状态**：更新 context-chain.md 和 tasks.md
 4. **输出报告**：如实汇报每个 phase 结果
 

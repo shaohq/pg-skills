@@ -94,7 +94,7 @@ EOF
 ### 2b. 获取配置上下文
 
 ```bash
-python3 {scriptsDir}/pg-parse-config.py pg-propose > /tmp/pg-config.json
+pg_dispatch tool 自动读取 pg-spec/config.yaml，无需手动执行
 ```
 
 从输出 JSON 获取：

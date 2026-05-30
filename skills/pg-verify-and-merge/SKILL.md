@@ -25,7 +25,7 @@ pg-apply-change 完成后，将 feature branch 合并到 master 前，先将 fea
 
 ## 配置依赖
 
-本 SKILL 声明所需的配置项。**SKILL 自身不解析配置文件。** orchestrator（manager agent）通过执行 `{scriptsDir}/pg-parse-config.py pg-verify-and-merge` 获取工作流所需配置并注入上下文。
+本 SKILL 声明所需的配置项。**SKILL 自身不解析配置文件。** orchestrator（manager agent）通过执行 `pg_dispatch（自动读取 pg-spec/config.yaml） pg-verify-and-merge` 获取工作流所需配置并注入上下文。
 
 | 上下文变量 | 来源 | 用途 |
 |-----------|------|------|
@@ -52,7 +52,7 @@ pg-apply-change 完成后，将 feature branch 合并到 master 前，先将 fea
 
 ## 阶段结构
 
-前置步骤（orchestrator 执行）：调用 `{scriptsDir}/pg-parse-config.py pg-verify-and-merge` 获取配置，将以下值注入上下文：`Backend.root/test/lint/start/port/health-check`、`Frontend.root/lint/start/port/test`、`Git.default-branch`。
+前置步骤（orchestrator 执行）：调用 `pg_dispatch（自动读取 pg-spec/config.yaml） pg-verify-and-merge` 获取配置，将以下值注入上下文：`Backend.root/test/lint/start/port/health-check`、`Frontend.root/lint/start/port/test`、`Git.default-branch`。
 
 所有 phase 均为 orchestrator 自执行（无 sub-agent 派遣）。
 
