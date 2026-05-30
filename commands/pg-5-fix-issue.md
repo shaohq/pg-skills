@@ -2,6 +2,7 @@
 name: 5-pg-fix-issue
 description: 5. 启动 pg-fix-issue SKILL，复现问题、修复问题并验证修复结果
 trigger: slash
+agent: pg-manager
 ---
 
 # /5-pg-fix-issue

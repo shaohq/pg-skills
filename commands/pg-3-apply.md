@@ -2,6 +2,7 @@
 name: 3-pg-apply
 description: 3. 启动 pg-apply-change SKILL，全栈变更实现
 trigger: slash
+agent: pg-manager
 ---
 
 # /3-pg-apply <change-name>

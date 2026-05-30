@@ -1,7 +1,8 @@
 ---
 name: 4-pg-run-e2e
-description: 4. 启动 pg-run-e2e SKILL，运行 E2E 测试并修复失败
+description: 4. 自动运行 E2E 测试，并将需要进一步修复问题记录到 KnownIssues.md
 trigger: slash
+agent: pg-manager
 ---
 
 # /4-pg-run-e2e
