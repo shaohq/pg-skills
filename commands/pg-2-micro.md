@@ -6,7 +6,11 @@ trigger: slash
 
 # Pg Micro Change
 
-**技能**: `pg-micro-change`
+> **⚠️ 必须先加载技能**
+>
+> 在开始任何工作之前，**必须**使用 `skill` 工具加载 `pg-micro-change` skill，然后严格按照该 skill 的完整工作流（Phase 0 → A/B/C/D/E/F/G）执行。
+>
+> 不加载 skill 就进入实现阶段属于违规流程，所有未提交的代码必须撤销。
 
 **用法**: `/2-pg-micro [变更描述]`
 
