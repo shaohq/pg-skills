@@ -67,13 +67,16 @@ function readModelConfig(projectDir) {
 }
 
 /** Poll session status until completed or timeout. */
-async function waitForCompletion(sessionID, client, maxSec = 120) {
+async function waitForCompletion(sessionID, client, maxSec = 300) {
   for (let i = 0; i < maxSec; i++) {
     const res = await client.session.status({ path: { id: sessionID } });
     const data = res.data;
-    if (data.status === "completed" || data.status === "idle") return data;
-    if (data.status === "aborted" || data.status === "error") {
-      throw new Error(`Session ${sessionID} ended with status: ${data.status}`);
+    // Response format: { "<sessionID>": { type: "idle"|"busy"|"retry" } }
+    const status = data?.[sessionID] || data;
+    const type = status.type || status?.status;
+    if (type === "idle") return data;
+    if (type === "aborted" || type === "error") {
+      throw new Error(`Session ${sessionID} ended with status: ${type}`);
     }
     await new Promise((r) => setTimeout(r, 1000));
   }
