@@ -14,7 +14,7 @@ metadata:
 
 **输入**：一个变更名称（kebab-case），该变更已由 `pg-propose` 创建，且 `pg-spec/changes/<change-name>/tasks.md` 存在。
 
-> **角色边界**：此 SKILL 由 `pg-manager` agent 在收到 `/3-pg-apply` 命令后加载执行。**用户面 agent 不应直接加载此 SKILL**——如需启动实现流程，应使用 Task 工具派遣 `pg-manager` agent。
+> **角色边界**：此 SKILL 由编排器 agent 在收到 `/3-pg-apply` 命令后加载执行。编排器使用 `pg_dispatch_agent` tool 派遣各阶段 agent。
 
 ---
 
@@ -185,10 +185,15 @@ WORKFLOW_FAILED=false
 
 ### 简单派遣（Phase A, B, E, F）
 
+使用 `pg_dispatch_agent` tool 派遣阶段 agent：
+
 ```
 1. 读取 context-chain.md 获取执行历史
 2. 追加子阶段开始记录到 context-chain.md (SUB-START)
-3. 派遣对应的阶段 agent，传递该阶段所需的配置值
+3. 调用 pg_dispatch_agent tool：
+   - agent_name: pg-apply-change/backend-test（根据阶段选择对应 agent）
+   - task: 当前阶段的所有未完成任务 + 配置上下文
+   - context: 该阶段所需的配置值 JSON
 4. 校验 agent 返回：
    a. 空结果 → 标记 [FAILED]，重试（最多 3 次），或 WORKFLOW_FAILED=true
    b. 正常   → 标记 [COMPLETED]，验证 tasks.md 已更新
@@ -201,18 +206,23 @@ WORKFLOW_FAILED=false
 
 ```
 □ context-chain.md 已追加 SUB-START 记录（date -Iseconds 真实时间戳）
-□ agent 返回非空结果
+□ pg_dispatch_agent 调用返回非空结果
 □ tasks.md 中当前阶段所有任务已标记 [x]
 □ context-chain.md 已追加 SUB-END 记录（含摘要和产出物）
 ```
 
 ### 验证派遣（Phase C, G）
 
+使用 `pg_dispatch_agent` tool 交替派遣 verify / fix agent：
+
 ```
 1. attempt=1, max_fix_cycles=4
 2. 读取 context-chain.md
 3. 追加 Verify-START 记录到 context-chain.md
-4. 派遣 verify agent，传递该阶段所需的配置值
+4. 调用 pg_dispatch_agent tool：
+   - agent_name: pg-apply-change/backend-verify（或 frontend-verify）
+   - task: 验证任务
+   - context: 该阶段所需的配置值 JSON
 5. 读取 verification report，校验报告一致性：
    a. 检查 ## Recommendation 的值（PROCEED / ESCALATE）
    b. 检查 ### ORCHESTRATOR ACTION - Status 的值
@@ -224,7 +234,9 @@ WORKFLOW_FAILED=false
       - 检查 fix 循环次数（最多 4 次）
       - 从报告中提取 FIX ISSUE REQUEST
       - 追加 Fix-START 记录到 context-chain.md
-      - 派遣 fix agent（attempt≤2 用标准版，attempt≥3 用 pro 版），传递配置值
+      - 调用 pg_dispatch_agent tool：
+        agent_name: pg-apply-change/backend-fix（attempt≤2 用标准版）或 backend-fix-pro（attempt≥3）
+        task: FIX ISSUE REQUEST + 配置上下文
       - 追加 Fix-END 记录
       - attempt += 1，回到步骤 2（重新派遣 verify agent）
 7. 如果 WORKFLOW_FAILED → 跳出阶段循环

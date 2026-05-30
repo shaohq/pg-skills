@@ -33,7 +33,7 @@ graph TD
     StartA([进入 Phase]) --> CheckTasks{Phase 有未完成任务?}
     CheckTasks -->|全部完成 或 - 无| Skip[跳过]
     CheckTasks -->|有未完成任务| AppendChain[追加 SUB-START 到 context-chain]
-    AppendChain --> Dispatch[派遣子 agent<br/>传递 tasks.md 路径 + 配置]
+    AppendChain --> Dispatch[通过 pg_dispatch_agent tool<br/>派遣子 agent，传递任务 + 配置]
     Dispatch --> Result{agent 返回?}
     Result -->|正常完成| Ok[追加 SUB-END COMPLETED<br/>验证 tasks.md 已更新]
     Result -->|空结果| Retry{重试次数 < 3?}
