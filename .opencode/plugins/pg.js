@@ -12,44 +12,6 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const pgRoot = path.resolve(__dirname, "../..");
 
 /** Parse nested YAML by indentation (covers pg-spec/config.yaml format). */
-function parseYaml(text) {
-  const lines = text.split("\n");
-  const root = {};
-  const stack = [{ indent: -1, obj: root }];
-
-  for (const raw of lines) {
-    const trimmed = raw.trimEnd();
-    if (!trimmed.trim() || trimmed.trim().startsWith("#")) continue;
-    const indent = trimmed.search(/\S|$/);
-    const content = trimmed.trim();
-    const colonIdx = content.indexOf(":");
-    if (colonIdx < 0) continue;
-    const key = content.slice(0, colonIdx).trim();
-    const val = content.slice(colonIdx + 1).trim();
-
-    while (stack.length > 1 && indent <= stack[stack.length - 1].indent) {
-      stack.pop();
-    }
-    let current = stack[stack.length - 1].obj;
-
-    if (val === "") {
-      const child = {};
-      current[key] = child;
-      stack.push({ indent, obj: child });
-    } else {
-      current[key] = val;
-    }
-  }
-  return root;
-}
-
-/** Read pg-spec/config.yaml from project. */
-function readProjectConfig(projectDir) {
-  const configPath = path.join(projectDir, "pg-spec", "config.yaml");
-  if (!fs.existsSync(configPath)) return {};
-  return parseYaml(fs.readFileSync(configPath, "utf-8"));
-}
-
 /** Read model config. */
 function readModelConfig(projectDir) {
   const modelPath = path.join(projectDir, "pg-spec", "config-model.yaml");
@@ -62,17 +24,6 @@ function readModelConfig(projectDir) {
     if (i > 0) { const k = t.slice(0, i).trim(), v = t.slice(i + 1).trim(); if (k && v) models[k] = v; }
   }
   return models;
-}
-
-/** Convert agent frontmatter permissions to tools map. */
-function frontmatterToTools(fm) {
-  const t = {};
-  if (fm.edit === "allow")     { t.Edit = true; t.Write = true; }
-  if (fm.bash === "allow")     { t.Bash = true; }
-  if (fm.read === "allow")     { t.Read = true; t.Glob = true; t.Grep = true; }
-  if (fm.list === "allow")     { t.List = true; }
-  if (fm.task === "allow")     { t.Task = true; }
-  return t;
 }
 
 /** Poll session status until completed. */
@@ -135,6 +86,11 @@ export const PgSkillsPlugin = async (input) => {
       if (!config.skills.paths.includes(skillsDir)) {
         config.skills.paths.push(skillsDir);
       }
+      config.agents = config.agents || {};
+      config.agents.paths = config.agents.paths || [];
+      if (!config.agents.paths.includes(agentsDir)) {
+        config.agents.paths.push(agentsDir);
+      }
       ensureProjectFiles(projectDir);
     },
 
@@ -147,62 +103,38 @@ export const PgSkillsPlugin = async (input) => {
           task: { type: "string", description: "The task description for the agent to execute" },
         },
         execute: async (args, ctx) => {
-          const agentParts = args.agent_name.split("/");
-          const agentFile = path.join(agentsDir, ...agentParts) + ".md";
-          if (!fs.existsSync(agentFile)) {
-            return `Error: Agent "${args.agent_name}" not found`;
-          }
-
-          const content = fs.readFileSync(agentFile, "utf-8");
-          const match = content.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
-          const frontmatter = {};
-          if (match) {
-            for (const line of match[1].split("\n")) {
-              const idx = line.indexOf(":");
-              if (idx > 0) frontmatter[line.slice(0, idx).trim()] = line.slice(idx + 1).trim();
-            }
-          }
-          const agentPrompt = (match ? match[2] : content).trim();
-
-          // Model: config-model.yaml > frontmatter
-          const modelConfig = readModelConfig(projectDir);
-          const modelStr = modelConfig[args.agent_name] || frontmatter.model || undefined;
-
+          // Read config-model.yaml for model override
+          const modelStr = readModelConfig(projectDir)[args.agent_name];
           let model;
           if (modelStr) {
             const slashIdx = modelStr.indexOf("/");
-            if (slashIdx > 0) {
-              model = { providerID: modelStr.slice(0, slashIdx), modelID: modelStr.slice(slashIdx + 1) };
-            } else {
-              model = { providerID: "default", modelID: modelStr };
-            }
+            model = slashIdx > 0
+              ? { providerID: modelStr.slice(0, slashIdx), modelID: modelStr.slice(slashIdx + 1) }
+              : { providerID: "default", modelID: modelStr };
           }
 
-          // Config context
-          const projectConfig = readProjectConfig(projectDir);
-          const configBlock = Object.keys(projectConfig).length
-            ? "\n\n## Project Config\n" + JSON.stringify(projectConfig, null, 2)
-            : "";
+          // Send subtask part to parent session — server handles agent dispatch
+          const subtaskPart = {
+            type: "subtask",
+            prompt: args.task,
+            description: `Running ${args.agent_name}`,
+            agent: args.agent_name,
+          };
+          if (model) subtaskPart.model = model;
 
-          const taskText = [configBlock, "\n\n## Task\n" + args.task].join("\n");
-
-          // Create child session
-          const createRes = await client.session.create({
-            body: { parentID: ctx.sessionID, title: `pg:${args.agent_name}` },
-            query: { directory: projectDir },
+          const res = await client.session.prompt({
+            path: { id: ctx.sessionID },
+            body: { parts: [subtaskPart] },
           });
-          const sessionID = createRes.data?.id || createRes.data?.sessionID;
-          if (!sessionID) return `Error: Failed to create session for "${args.agent_name}"`;
 
-          // Send prompt async with system, tools, and model
-          if (typeof client.session.promptAsync === "function") {
-            const promptBody = {
-              system: agentPrompt,
-              tools: frontmatterToTools(frontmatter),
-              parts: [{ type: "text", text: taskText }],
-            };
-            if (model) promptBody.model = model;
-            await client.session.promptAsync({ path: { id: sessionID }, body: promptBody });
+          // Extract child sessionID from the response
+          const parts = res.data?.parts || [];
+          let sessionID;
+          for (const p of parts) {
+            if (p.type === "subtask" && p.sessionID) { sessionID = p.sessionID; break; }
+          }
+          if (!sessionID) {
+            return `Error: Agent "${args.agent_name}" dispatch failed — no session created`;
           }
 
           // Wait for completion and read result
