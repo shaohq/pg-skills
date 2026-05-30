@@ -79,7 +79,29 @@ async function getResultText(sessionID, client) {
   return "(no text response from agent)";
 }
 
-export const PgSkillsPlugin = async () => {
+/** Initialize pg-spec/ project files if missing. */
+function ensureProjectFiles(projectDir) {
+  const pgSpecDir = path.join(projectDir, "pg-spec");
+  if (!fs.existsSync(pgSpecDir)) return;
+
+  // .gitignore
+  const gitignorePath = path.join(pgSpecDir, ".gitignore");
+  if (!fs.existsSync(gitignorePath)) {
+    fs.writeFileSync(gitignorePath, "config-model.yaml\n", "utf-8");
+  }
+
+  // config-model.yaml
+  const modelConfigPath = path.join(pgSpecDir, "config-model.yaml");
+  if (!fs.existsSync(modelConfigPath)) {
+    const templatePath = path.join(pgRoot, "scripts", "config-model.default.yaml");
+    if (fs.existsSync(templatePath)) {
+      fs.copyFileSync(templatePath, modelConfigPath);
+    }
+  }
+}
+
+export const PgSkillsPlugin = async (input) => {
+  const projectDir = input.worktree || input.directory;
   const skillsDir = path.join(pgRoot, "skills");
 
   return {
@@ -89,6 +111,7 @@ export const PgSkillsPlugin = async () => {
       if (!config.skills.paths.includes(skillsDir)) {
         config.skills.paths.push(skillsDir);
       }
+      ensureProjectFiles(projectDir);
     },
 
     tool: {
