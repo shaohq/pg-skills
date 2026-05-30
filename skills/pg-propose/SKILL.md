@@ -94,7 +94,7 @@ EOF
 ### 2b. 获取配置上下文
 
 ```bash
-pg_dispatch tool 自动读取 pg-spec/config.yaml，无需手动执行
+直接 Read `pg-spec/config.yaml` 读取项目配置
 ```
 
 从输出 JSON 获取：

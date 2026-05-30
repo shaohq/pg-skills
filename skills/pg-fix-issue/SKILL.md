@@ -10,7 +10,7 @@ metadata:
 
 # pg-fix-issue
 
-用户描述问题后，编排器先规划问题复现步骤，然后使用 `pg_dispatch` tool 派遣 `pg-fix-issue/coder` agent 复现问题、收集错误信息、进行系统化诊断、对根因进行修复，coder 返回修复报告后编排器检查结果并按模板输出最终结论。
+用户描述问题后，主 agent 先规划问题复现步骤，然后通过 Task 工具派遣 `pg-fix-issue/coder` agent（`subagent_type: "pg-fix-issue/coder"`）复现问题、收集错误信息、进行系统化诊断、对根因进行修复，coder 返回修复报告后主 agent 检查结果并按模板输出最终结论。
 
 ## 前置条件
 
@@ -20,9 +20,9 @@ metadata:
 
 项目根目录的 `pg-spec/config.yaml` 必须包含 `backend` 和 `frontend` 配置段。
 
-### 2. agent 定义
+### 2. agent
 
-此 SKILL 依赖 `pg-fix-issue/coder` agent，定义在 pg-skills 插件包的 `agents/pg-fix-issue/coder.md` 中。
+此 SKILL 依赖 `pg-fix-issue/coder` agent（由 pg-skills 插件自动提供）。
 
 ---
 
@@ -116,12 +116,13 @@ question 工具调用：
 
 ### Phase 4: 派遣 coder agent
 
-使用 `pg_dispatch` tool 派遣 `pg-fix-issue/coder` agent，**在 task 参数中附带任务描述和配置上下文**：
+使用 Task 工具派遣 `pg-fix-issue/coder` agent，**在 prompt 中附带任务描述和配置上下文**：
 
 ```text
-pg_dispatch tool 调用：
-  agent_name: pg-fix-issue/coder
-  task: |
+Task 工具调用：
+  subagent_type: pg-fix-issue/coder
+  description: "复现问题并进行根因修复"
+  prompt: |
     FIX ISSUE REQUEST
 
     - issue_title: <问题标题>
@@ -130,15 +131,10 @@ pg_dispatch tool 调用：
     - reproduction_steps: |
         1. <步骤 1>
         2. <步骤 2>
-        ⚠️ 重要：必须真实执行以下步骤，不得以阅读代码代替！
-
+        ...
     ────────────────────────────────────────
     请执行问题复现、诊断、修复并验证修复结果。
-    后端配置: {backend.root}/{backend.port}...
-    前端配置: {frontend.root}/{frontend.port}...
 ```
-
-注：`pg_dispatch` tool 会自动从 `pg-spec/config-model.yaml` 读取 `pg-fix-issue/coder` 的模型配置。`{backend.root}` 等占位符由编排器在调用前替换为实际配置值。
 
 ### Phase 5: 检查修复结果（两步验证法）
 

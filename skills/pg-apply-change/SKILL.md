@@ -14,7 +14,7 @@ metadata:
 
 **输入**：一个变更名称（kebab-case），该变更已由 `pg-propose` 创建，且 `pg-spec/changes/<change-name>/tasks.md` 存在。
 
-> **角色边界**：此 SKILL 由 `pg-manager` agent 在收到 `/3-pg-apply` 命令后加载执行。编排器使用 `pg_dispatch` tool 派遣各阶段 agent。
+> **角色边界**：此 SKILL 由 `pg-manager` agent 在收到 `/3-pg-apply` 命令后加载执行。编排器使用 Task 工具（subagent_type） 派遣各阶段 agent。
 
 ---
 
@@ -188,7 +188,7 @@ WORKFLOW_FAILED=false
 ```
 1. 读取 context-chain.md 获取执行历史
 2. 追加子阶段开始记录到 context-chain.md (SUB-START)
-3. 使用 `pg_dispatch` tool 派遣对应的阶段 agent，传递该阶段所需的配置值
+3. 使用 Task 工具（subagent_type） 派遣对应的阶段 agent，传递该阶段所需的配置值
 4. 校验 agent 返回：
    a. 空结果 → 标记 [FAILED]，重试（最多 3 次），或 WORKFLOW_FAILED=true
    b. 正常   → 标记 [COMPLETED]，验证 tasks.md 已更新
@@ -212,7 +212,7 @@ WORKFLOW_FAILED=false
 1. attempt=1, max_fix_cycles=4
 2. 读取 context-chain.md
 3. 追加 Verify-START 记录到 context-chain.md
-4. 使用 `pg_dispatch` tool 派遣 verify agent，传递该阶段所需的配置值
+4. 使用 Task 工具（subagent_type） 派遣 verify agent，传递该阶段所需的配置值
 5. 读取 verification report，校验报告一致性：
    a. 检查 ## Recommendation 的值（PROCEED / ESCALATE）
    b. 检查 ### ORCHESTRATOR ACTION - Status 的值
@@ -224,7 +224,7 @@ WORKFLOW_FAILED=false
       - 检查 fix 循环次数（最多 4 次）
       - 从报告中提取 FIX ISSUE REQUEST
       - 追加 Fix-START 记录到 context-chain.md
-      - 使用 `pg_dispatch` tool 派遣 fix agent（attempt≤2 用标准版，attempt≥3 用 pro 版），传递配置值
+      - 使用 Task 工具（subagent_type） 派遣 fix agent（attempt≤2 用标准版，attempt≥3 用 pro 版），传递配置值
       - 追加 Fix-END 记录
       - attempt += 1，回到步骤 2（重新派遣 verify agent）
 7. 如果 WORKFLOW_FAILED → 跳出阶段循环

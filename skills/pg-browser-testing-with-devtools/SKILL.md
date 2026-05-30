@@ -19,7 +19,7 @@ metadata:
 此 SKILL 读取 `pg-spec/config.yaml` 获取前端配置：
 
 ```bash
-pg_dispatch tool 自动读取 pg-spec/config.yaml，无需手动执行
+直接 Read `pg-spec/config.yaml` 读取项目配置
 ```
 
 | 配置键 | 用途 | 来自 |
