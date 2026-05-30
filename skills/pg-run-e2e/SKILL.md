@@ -122,6 +122,133 @@ python3 .opencode/scripts/pg-e2e-parse-results.py parse --log-file temp/e2e-test
 python3 .opencode/scripts/pg-e2e-parse-results.py known-issues --path <knownIssues.path> --out temp/phase1-known-issues.json
 ```
 
+仅从 `## Active Known Issues` 区域提取，忽略 `## Fix History`。这些脚本跳过 fix-e2e 调用。
+
+---
+
+### Phase 2: 并行调度 pg-run-e2e/fix-e2e Agent
+
+对每个失败脚本（排除 KnownIssues 中已记录的），并行调用 `pg-run-e2e/fix-e2e` agent。每个 subagent 处理一个独立的 spec 文件，写入操作互不冲突。
+
+> **编排器注意事项**：Phase 1.3 中 `skipped_known` 列表已记录应跳过的脚本。调度前检查当前脚本是否在该列表中，确保不将已知问题脚本下发至 subagent。
+
+#### 2.1 构造 pg-run-e2e/fix-e2e 调用
+
+> **编排器注意事项**：调用 subagent 前，从 `pg-spec/config.yaml` 读取 `frontend.root`、`e2e.runSingleCommand`，将实际值替换到模板占位符后发送。
+
+向 `pg-run-e2e/fix-e2e` agent 传递：
+- 脚本路径（如 `tests/e2e/specs/xxx.spec.ts`）
+- 配置上下文（frontend.root、e2e.runSingleCommand）
+- 全量测试输出文件路径（testOutputFile，如 `temp/e2e-test-output.log`）
+- 脚本内所有失败/错误/skipped 测试的清单（issueList）
+
+调用模板：
+```
+pg-run-e2e/fix-e2e，请诊断并修复以下 E2E 测试脚本的失败问题：
+
+脚本路径：<script-path>
+
+配置上下文：
+- frontend.root: <frontend.root>
+- e2e.runSingleCommand: <e2e.runSingleCommand>
+- testOutputFile: <testOutputFile>
+
+失败问题清单：
+- [failed] <test-name>: <error-summary>
+- [skipped] <test-name>: <skip-reason>
+- [error] <test-name>: <error-summary>
+
+请对每个问题调用 pg-systematic-diagnosing 进行根因分析，然后统一决定修复策略。并将你最终的处理结果汇报给我。
+```
+
+#### 2.2 调度策略（Work Queue 模型）
+
+采用**工作队列模型**，维护一个"待处理队列"和一个"活跃池"，避免 batch 模式的长尾等待：
+
+```
+待处理队列: [script_D, script_E, script_F, ...]  ← 尚未调度的脚本
+活跃池(上限5): [A, B, C]                          ← 正在执行的 agent
+```
+
+调度规则：
+
+1. **初始化**：从待处理队列取出前 N 个脚本（N=并发上限），以 `background=true` 模式启动 subagent
+2. **维持水位**：编排器进入轮询循环，对每个活跃 agent 调用 `task_status(task_id, wait=false)` 检查完成状态
+3. **完成一个，调度一个**：当某个 agent 完成时，立即从队列头部取出下一个脚本调度，始终保持活跃池内有 N 个 agent 在执行
+4. **队列为空**：当待处理队列为空且所有活跃 agent 完成，终止轮询，进入 Phase 3
+
+并发上限建议为 4-5，避免 `--grep` 验证时过多浏览器进程争用资源。每个 subagent 处理一个独立的 spec 文件，互不冲突（读取共享文件、写入各自 spec 文件、`--grep` 验证快速且隔离）。
+
+#### 2.3 收集 pg-run-e2e/fix-e2e 执行结果
+
+每个 `pg-run-e2e/fix-e2e` agent 返回：
+- 诊断报告列表（每个问题一条）
+- 修复执行结果（fixed/skipped/reported）
+- 需要上报生产代码问题的清单
+
+汇总所有 agent 的结果：
+
+| 脚本 | 问题数 | 已修复 | 跳过 | 上报 |
+|------|--------|--------|------|------|
+| xxx.spec.ts | 3 | 2 | 0 | 1 |
+
+---
+
+### Phase 3: 更新 KnownIssues.md（脚本自动处理，LLM pass-through）
+
+#### 3.1 收集 fix-e2e agent 结果并从报告中提取结构化字段
+
+每个 agent 返回的完整报告已包含所有需要的信息。**编排器需要阅读每个 agent 的报告，提取结构化字段**，按以下 schema 构造 `temp/fix-results.json`：
+
+```json
+{
+  "date": "<YYYY-MM-DD>",
+  "testRun": { "total": <N>, "passed": <N>, "failed": <N>, "skipped": <N> },
+  "agents": [{
+    "script": "tests/e2e/.../xxx.spec.ts",                    # required
+    "overview": { "total": N, "passed": N, "failed": N },     # from agent's 测试执行概览
+    "stats": { "fixed": N, "unfixable": N },                  # from agent's ✅/❌ 统计
+    "unfixableIssues": [{                                      # from agent's ### 无法修复的问题
+      "title": "问题标题",                                      # required
+      "component": "test data|backend|frontend|environment",   # required
+      "file": "path/to/source/file",                           # optional
+      "affectedTests": "`tests/e2e/...` - test names",         # required: must include full script path in backticks
+      "expected": "期望行为",                                    # optional
+      "actual": "实际行为",                                     # optional
+      "rootCause": "根因描述",                                   # required
+      "orchestratorSteps": ["步骤 1", "步骤 2"]                 # optional
+    }]
+  }]
+}
+```
+
+示例（1 个有不可修复问题的 agent）：
+```json
+{
+  "script": "tests/e2e/specs/admin/tenant/packages/download-complete-flow.spec.ts",
+  "overview": { "total": 4, "passed": 1, "failed": 3 },
+  "stats": { "fixed": 0, "unfixable": 1 },
+  "unfixableIssues": [{
+    "title": "租户级镜像仓库缺失",
+    "component": "test data",
+    "file": "maas-frontend/tests/e2e/specs/admin/tenant/packages/download-complete-flow.spec.ts",
+    "affectedTests": "`tests/e2e/specs/admin/tenant/packages/download-complete-flow.spec.ts` - 5.3.1, 5.3.2, 5.3.3",
+    "expected": "下载向导 Step 3 的镜像仓库下拉框显示可选项",
+    "actual": "下拉框展开后无可用选项",
+    "rootCause": "测试 beforeAll 创建了平台级 registry 和 repository，但下载向导调用的是 tenant 范围的数据",
+    "orchestratorSteps": ["在 beforeAll 中通过 scoped API 创建租户级镜像仓库", "确认 API 返回 201"]
+  }]
+}
+```
+
+#### 3.2 脚本自动更新 KnownIssues.md
+
+```bash
+python3 .opencode/scripts/pg-e2e-parse-results.py update-known-issues \
+  --ki-path <knownIssues.path> \
+  --fix-results temp/fix-results.json
+```
+
 脚本会做三件事：
 1. 读取 fix-results.json 中的 `unfixableIssues` 结构化数据 → 格式化追加到 `## Active Known Issues`
 2. 生成 E2E Fix 汇总报告（含 fixed/unfixable 统计） → 追加到 `## Fix History`

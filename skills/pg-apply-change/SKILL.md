@@ -14,7 +14,7 @@ metadata:
 
 **输入**：一个变更名称（kebab-case），该变更已由 `pg-propose` 创建，且 `pg-spec/changes/<change-name>/tasks.md` 存在。
 
-> **角色边界**：此 SKILL 由 `pg-manager` agent 在收到 `/3-pg-apply` 命令后加载执行。编排器使用 Task 工具（subagent_type） 派遣各阶段 agent。
+> **角色边界**：此 SKILL 由 `pg-manager` agent 在收到 `/3-pg-apply` 命令后加载执行。**用户面 agent 不应直接加载此 SKILL**——如需启动实现流程，应使用 Task 工具派遣 `pg-manager` agent。
 
 ---
 
@@ -28,7 +28,7 @@ metadata:
 
 ### 2. `pg-spec/config.yaml` 统一配置
 
-项目根目录的 `pg-spec/config.yaml` **必须**包含所有项目特定的命令、路径、端口、项目上下文、产物规则。编排器直接 Read 该文件获取配置值，无需运行外部脚本。具体格式在下方 [配置约定](#配置约定) 中定义。
+项目根目录的 `pg-spec/config.yaml` **必须**包含所有项目特定的命令、路径、端口、项目上下文、产物规则。由 `pg-parse-config.py` 脚本读取，编排器通过执行该脚本获取配置值。具体格式在下方 [配置约定](#配置约定) 中定义。
 
 ### 3. 子 agent 定义
 
@@ -53,7 +53,7 @@ metadata:
 
 ## 配置约定
 
-项目根目录的 `pg-spec/config.yaml` 是统一配置源，包含所有项目特定的命令、路径、端口、项目上下文、产物规则。编排器直接 Read 该文件获取配置值，解析后传递给子 agent。**子 agent 不需要自己读取配置文件。**
+项目根目录的 `pg-spec/config.yaml` 是统一配置源，包含所有项目特定的命令、路径、端口、项目上下文、产物规则。编排器在工作流开始时调用 `pg-parse-config.py` 读取该文件一次，解析后将子 agent 需要的配置值作为上下文传递。**子 agent 不需要自己读取配置文件。**
 
 ### 必须的结构
 
@@ -91,13 +91,12 @@ git:
 
 ## 编排器读取配置的策略
 
-**关键设计**：编排器（manager agent）直接 Read `pg-spec/config.yaml` 获取配置。配置值注入到上下文后，编排器从中解析出 Backend、Frontend、OpenAPI、Git 等配置块。之后每次派遣子 agent 时，编排器将对应的配置值作为上下文传递给 agent，**子 agent 不需要自己读取配置文件**。
+**关键设计**：编排器（manager agent）在执行工作流前调用 `pg-parse-config.py` 获取统一配置 JSON。配置值注入到上下文后，编排器从中解析出 Backend、Frontend、OpenAPI、Git 四个配置块。之后每次派遣子 agent 时，编排器将对应的配置值作为上下文传递给 agent，**子 agent 不需要自己读取配置文件**。
 
 ```
-工作流开始（编排器 Read pg-spec/config.yaml 获取配置）
+工作流开始（编排器执行 pg-parse-config.py 获取配置）
   │
   ├→ 解析统一配置
-  │   ├→ Scripts config   { dir }
   │   ├→ Backend config   { root, port, compile, test, lint, start, health-check }
   │   ├→ Frontend config  { root, port, test, lint, start, format }
   │   ├→ OpenAPI config   { command, frontend-root }
@@ -161,7 +160,7 @@ git:
 ```
 WORKFLOW_FAILED=false
 
-1. 直接 Read `pg-spec/config.yaml` 获取工作流所需配置（含 `__meta.hostname`）
+1. 执行 `python3 .opencode/scripts/pg-parse-config.py pg-apply-change` 获取工作流所需配置（含 `__meta.hostname`）
 
 2. 读取 pg-spec/changes/<change>/tasks.md 获取任务清单
 
@@ -188,7 +187,7 @@ WORKFLOW_FAILED=false
 ```
 1. 读取 context-chain.md 获取执行历史
 2. 追加子阶段开始记录到 context-chain.md (SUB-START)
-3. 使用 Task 工具（subagent_type） 派遣对应的阶段 agent，传递该阶段所需的配置值
+3. 派遣对应的阶段 agent，传递该阶段所需的配置值
 4. 校验 agent 返回：
    a. 空结果 → 标记 [FAILED]，重试（最多 3 次），或 WORKFLOW_FAILED=true
    b. 正常   → 标记 [COMPLETED]，验证 tasks.md 已更新
@@ -212,7 +211,7 @@ WORKFLOW_FAILED=false
 1. attempt=1, max_fix_cycles=4
 2. 读取 context-chain.md
 3. 追加 Verify-START 记录到 context-chain.md
-4. 使用 Task 工具（subagent_type） 派遣 verify agent，传递该阶段所需的配置值
+4. 派遣 verify agent，传递该阶段所需的配置值
 5. 读取 verification report，校验报告一致性：
    a. 检查 ## Recommendation 的值（PROCEED / ESCALATE）
    b. 检查 ### ORCHESTRATOR ACTION - Status 的值
@@ -224,7 +223,7 @@ WORKFLOW_FAILED=false
       - 检查 fix 循环次数（最多 4 次）
       - 从报告中提取 FIX ISSUE REQUEST
       - 追加 Fix-START 记录到 context-chain.md
-      - 使用 Task 工具（subagent_type） 派遣 fix agent（attempt≤2 用标准版，attempt≥3 用 pro 版），传递配置值
+      - 派遣 fix agent（attempt≤2 用标准版，attempt≥3 用 pro 版），传递配置值
       - 追加 Fix-END 记录
       - attempt += 1，回到步骤 2（重新派遣 verify agent）
 7. 如果 WORKFLOW_FAILED → 跳出阶段循环
@@ -811,4 +810,4 @@ attempt >4  → WORKFLOW_FAILED=true
 - **会话恢复**：读取 `tasks.md` + `context-chain.md` 确定上次执行位置，从第一个有未完成任务的阶段继续。
 - **编排器不得在派遣 agent 前读取 design/proposal/specs 文件**——agent 自己读取自己的上下文。
 - **Phase D 是唯一编排器自执行阶段**——其他阶段全部派遣子 agent。
-- **编排器直接 Read `pg-spec/config.yaml` 获取统一配置**，无需手动读取。编排器从中提取配置值传递给子 agent，子 agent 不再自己读配置文件。
+- **编排器通过 `pg-parse-config.py` 获取统一配置**，无需手动读取。编排器从中提取配置值传递给子 agent，子 agent 不再自己读配置文件。

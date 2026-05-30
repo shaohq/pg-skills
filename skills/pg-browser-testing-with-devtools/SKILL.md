@@ -19,7 +19,7 @@ metadata:
 此 SKILL 读取 `pg-spec/config.yaml` 获取前端配置：
 
 ```bash
-直接 Read `pg-spec/config.yaml` 读取项目配置
+python3 .opencode/scripts/pg-parse-config.py pg-micro-change > /tmp/pg-config.json
 ```
 
 | 配置键 | 用途 | 来自 |
@@ -134,8 +134,6 @@ export CHROME_PATH="/mnt/c/Program Files/Google/Chrome/Application/chrome.exe"
 由 `pg-apply-change/frontend-verify` agent 在 Phase G 中加载此 SKILL。
 
 ---
-
-> **截图保存规则**：所有 `take_screenshot` 截图必须保存到 `temp/debug/<日期>/` 目录（如 `temp/debug/2026-05-30/`），严禁放到项目根目录下。请使用 `$(date +%F)` 获取日期。
 
 ## 浏览器验证工作流
 
