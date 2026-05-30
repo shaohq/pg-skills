@@ -189,6 +189,3 @@ export const PgSkillsPlugin = async (input) => {
     },
   };
 };
-    },
-  };
-};
