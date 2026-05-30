@@ -2,7 +2,7 @@
  * PG-Skills plugin for OpenCode
  *
  * Registers pg-* skills path and provides the pg_dispatch tool
- * for dispatching sub-agents defined in agent-defs/.
+ * for dispatching sub-agents defined in agents/.
  */
 import path from "path";
 import fs from "fs";
@@ -125,7 +125,7 @@ function ensureProjectFiles(projectDir) {
 export const PgSkillsPlugin = async (input) => {
   const projectDir = input.worktree || input.directory;
   const skillsDir = path.join(pgRoot, "skills");
-  const agentDefsDir = path.join(pgRoot, "agent-defs");
+  const agentsDir = path.join(pgRoot, "agents");
   const client = input.client;
 
   return {
@@ -148,7 +148,7 @@ export const PgSkillsPlugin = async (input) => {
         },
         execute: async (args, ctx) => {
           const agentParts = args.agent_name.split("/");
-          const agentFile = path.join(agentDefsDir, ...agentParts) + ".md";
+          const agentFile = path.join(agentsDir, ...agentParts) + ".md";
           if (!fs.existsSync(agentFile)) {
             return `Error: Agent "${args.agent_name}" not found`;
           }

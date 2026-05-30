@@ -22,7 +22,7 @@ metadata:
 
 ### 2. agent 定义
 
-此 SKILL 依赖 `pg-fix-issue/coder` agent，定义在 pg-skills 插件包的 `agent-defs/pg-fix-issue/coder.md` 中。
+此 SKILL 依赖 `pg-fix-issue/coder` agent，定义在 pg-skills 插件包的 `agents/pg-fix-issue/coder.md` 中。
 
 ---
 
