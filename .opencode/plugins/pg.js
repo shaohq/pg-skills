@@ -23,6 +23,30 @@ function parseFrontmatter(content) {
   return { frontmatter: fm, body: match[2] };
 }
 
+/** Read pg-spec/config-model.yaml from the project directory. */
+function readModelConfig(projectDir) {
+  const configPath = path.join(projectDir, "pg-spec", "config-model.yaml");
+  if (!fs.existsSync(configPath)) return {};
+  const content = fs.readFileSync(configPath, "utf-8");
+  const models = {};
+  for (const line of content.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const idx = trimmed.indexOf(":");
+    if (idx > 0) {
+      const key = trimmed.slice(0, idx).trim();
+      const value = trimmed.slice(idx + 1).trim();
+      if (key && value) models[key] = value;
+    }
+  }
+  return models;
+}
+
+/** Resolve model for an agent: config-model.yaml > frontmatter > undefined. */
+function resolveModel(agentName, frontmatter, modelConfig) {
+  return modelConfig[agentName] || frontmatter.model || undefined;
+}
+
 /** Poll session status until completed or timeout. */
 async function waitForCompletion(sessionID, client, maxSec = 120) {
   for (let i = 0; i < maxSec; i++) {
@@ -97,6 +121,11 @@ export const PgSkillsPlugin = async () => {
           const { frontmatter, body } = parseFrontmatter(content);
           const agentPrompt = body.trim();
 
+          // Read model config from project
+          const projectDir = ctx.worktree || ctx.directory;
+          const modelConfig = readModelConfig(projectDir);
+          const model = resolveModel(args.agent_name, frontmatter, modelConfig);
+
           // Parse optional context
           let configContext = "";
           if (args.context) {
@@ -114,16 +143,14 @@ export const PgSkillsPlugin = async () => {
             "\n\n## Task\n" + args.task,
           ].join("\n");
 
-          // Resolve parent session directory
-          const directory = ctx.worktree || ctx.directory;
-
           // Create child session
           const createRes = await ctx.client.session.create({
             body: {
               parentID: ctx.sessionID,
               title: `pg:${args.agent_name}`,
+              ...(model ? { model: { id: model } } : {}),
             },
-            query: { directory },
+            query: { directory: projectDir },
           });
           const sessionID = createRes.data?.id || createRes.data?.sessionID;
 
@@ -136,8 +163,8 @@ export const PgSkillsPlugin = async () => {
             const promptBody = {
               parts: [{ type: "text", text: fullPrompt }],
             };
-            if (frontmatter.model) {
-              promptBody.model = { id: frontmatter.model };
+            if (model) {
+              promptBody.model = { id: model };
             }
             await ctx.client.session.prompt({
               path: { id: sessionID },
@@ -151,7 +178,7 @@ export const PgSkillsPlugin = async () => {
           // Read result
           const resultText = await getResultText(sessionID, ctx.client);
 
-          return `${resultText}\n\n<task_metadata>\nsession_id: ${sessionID}\nagent: ${args.agent_name}\n</task_metadata>`;
+          return `${resultText}\n\n<task_metadata>\nsession_id: ${sessionID}\nagent: ${args.agent_name}\nmodel: ${model || "(default)"}\n</task_metadata>`;
         },
       },
     },
