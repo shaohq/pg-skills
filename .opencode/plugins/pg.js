@@ -3,7 +3,6 @@
  *
  * Registers pg-* skills path and provides the pg_dispatch tool
  * for dispatching sub-agents defined in agent-defs/.
- * Config parsing (pg-spec/config.yaml) is handled internally.
  */
 import path from "path";
 import fs from "fs";
@@ -28,7 +27,6 @@ function parseYaml(text) {
     const key = content.slice(0, colonIdx).trim();
     const val = content.slice(colonIdx + 1).trim();
 
-    // Pop stack back to correct indent level
     while (stack.length > 1 && indent <= stack[stack.length - 1].indent) {
       stack.pop();
     }
@@ -45,14 +43,14 @@ function parseYaml(text) {
   return root;
 }
 
-/** Read pg-spec/config.yaml from project and return parsed object. */
+/** Read pg-spec/config.yaml from project. */
 function readProjectConfig(projectDir) {
   const configPath = path.join(projectDir, "pg-spec", "config.yaml");
   if (!fs.existsSync(configPath)) return {};
   return parseYaml(fs.readFileSync(configPath, "utf-8"));
 }
 
-/** Read model config from pg-spec/config-model.yaml. */
+/** Read model config. */
 function readModelConfig(projectDir) {
   const modelPath = path.join(projectDir, "pg-spec", "config-model.yaml");
   if (!fs.existsSync(modelPath)) return {};
@@ -66,7 +64,18 @@ function readModelConfig(projectDir) {
   return models;
 }
 
-/** Poll session status until completed (no hard timeout). */
+/** Convert agent frontmatter permissions to tools map. */
+function frontmatterToTools(fm) {
+  const t = {};
+  if (fm.edit === "allow")     { t.Edit = true; t.Write = true; }
+  if (fm.bash === "allow")     { t.Bash = true; }
+  if (fm.read === "allow")     { t.Read = true; t.Glob = true; t.Grep = true; }
+  if (fm.list === "allow")     { t.List = true; }
+  if (fm.task === "allow")     { t.Task = true; }
+  return t;
+}
+
+/** Poll session status until completed. */
 async function waitForCompletion(sessionID, client) {
   for (;;) {
     const res = await client.session.status({ path: { id: sessionID } });
@@ -80,7 +89,7 @@ async function waitForCompletion(sessionID, client) {
   }
 }
 
-/** Read the last assistant text response from a session. */
+/** Read the last assistant text response. */
 async function getResultText(sessionID, client) {
   const res = await client.session.messages({ path: { id: sessionID }, query: { limit: 50 } });
   const messages = res.data?.messages || res.data || [];
@@ -96,13 +105,11 @@ async function getResultText(sessionID, client) {
 function ensureProjectFiles(projectDir) {
   const pgSpecDir = path.join(projectDir, "pg-spec");
   if (!fs.existsSync(pgSpecDir)) return;
-
   const files = [
     [".gitignore", "config-model.yaml\n"],
     ["config-model.yaml", path.join(pgRoot, "scripts", "config-model.default.yaml")],
     ["config.yaml", path.join(pgRoot, "scripts", "config.default.yaml")],
   ];
-
   for (const [name, source] of files) {
     const dest = path.join(pgSpecDir, name);
     if (!fs.existsSync(dest)) {
@@ -143,7 +150,7 @@ export const PgSkillsPlugin = async (input) => {
           const agentParts = args.agent_name.split("/");
           const agentFile = path.join(agentDefsDir, ...agentParts) + ".md";
           if (!fs.existsSync(agentFile)) {
-            return `Error: Agent "${args.agent_name}" not found at ${agentFile}`;
+            return `Error: Agent "${args.agent_name}" not found`;
           }
 
           const content = fs.readFileSync(agentFile, "utf-8");
@@ -157,16 +164,29 @@ export const PgSkillsPlugin = async (input) => {
           }
           const agentPrompt = (match ? match[2] : content).trim();
 
+          // Model: config-model.yaml > frontmatter
           const modelConfig = readModelConfig(projectDir);
-          const model = modelConfig[args.agent_name] || frontmatter.model || undefined;
+          const modelStr = modelConfig[args.agent_name] || frontmatter.model || undefined;
 
+          let model;
+          if (modelStr) {
+            const slashIdx = modelStr.indexOf("/");
+            if (slashIdx > 0) {
+              model = { providerID: modelStr.slice(0, slashIdx), modelID: modelStr.slice(slashIdx + 1) };
+            } else {
+              model = { providerID: "default", modelID: modelStr };
+            }
+          }
+
+          // Config context
           const projectConfig = readProjectConfig(projectDir);
           const configBlock = Object.keys(projectConfig).length
             ? "\n\n## Project Config\n" + JSON.stringify(projectConfig, null, 2)
             : "";
 
-          const fullPrompt = [agentPrompt, configBlock, "\n\n## Task\n" + args.task].join("\n");
+          const taskText = [configBlock, "\n\n## Task\n" + args.task].join("\n");
 
+          // Create child session
           const createRes = await client.session.create({
             body: { parentID: ctx.sessionID, title: `pg:${args.agent_name}` },
             query: { directory: projectDir },
@@ -174,16 +194,23 @@ export const PgSkillsPlugin = async (input) => {
           const sessionID = createRes.data?.id || createRes.data?.sessionID;
           if (!sessionID) return `Error: Failed to create session for "${args.agent_name}"`;
 
-          if (typeof client.session.prompt === "function") {
-            const promptBody = { parts: [{ type: "text", text: fullPrompt }] };
-            if (model) promptBody.model = { id: model };
-            await client.session.prompt({ path: { id: sessionID }, body: promptBody });
+          // Send prompt async with system, tools, and model
+          if (typeof client.session.promptAsync === "function") {
+            const promptBody = {
+              system: agentPrompt,
+              tools: frontmatterToTools(frontmatter),
+              parts: [{ type: "text", text: taskText }],
+            };
+            if (model) promptBody.model = model;
+            await client.session.promptAsync({ path: { id: sessionID }, body: promptBody });
           }
 
+          // Wait for completion and read result
           await waitForCompletion(sessionID, client);
           const resultText = await getResultText(sessionID, client);
 
-          return `${resultText}\n\n<task_metadata>\nsession_id: ${sessionID}\nagent: ${args.agent_name}\nmodel: ${model || "(default)"}\n</task_metadata>`;
+          const modelLabel = model ? `${model.providerID}/${model.modelID}` : "(default)";
+          return `${resultText}\n\n<task_metadata>\nsession_id: ${sessionID}\nagent: ${args.agent_name}\nmodel: ${modelLabel}\n</task_metadata>`;
         },
       },
     },
