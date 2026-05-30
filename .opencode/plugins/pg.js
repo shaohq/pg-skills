@@ -198,6 +198,7 @@ export const PgSkillsPlugin = async (input) => {
           if (typeof client.session.promptAsync === "function") {
             const promptBody = {
               system: agentPrompt,
+              agent: args.agent_name,
               tools: frontmatterToTools(frontmatter),
               parts: [{ type: "text", text: taskText }],
             };
