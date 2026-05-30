@@ -6,7 +6,6 @@
  */
 import path from "path";
 import fs from "fs";
-import { tool } from "@opencode-ai/plugin";
 import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -106,18 +105,14 @@ export const PgSkillsPlugin = async (input) => {
     },
 
     tool: {
-      pg_dispatch: tool({
+      pg_dispatch: {
         description:
           "Dispatch a pg-* sub-agent. Reads the agent definition from the pg-skills package's agent-defs/ directory and model config from pg-spec/config-model.yaml.",
         args: {
-          agent_name: tool.schema.string().describe(
-            "Agent identifier, e.g. 'pg-fix-issue/coder' or 'pg-apply-change/backend-dev'",
-          ),
-          task: tool.schema.string().describe(
-            "The task description for the agent to execute",
-          ),
+          agent_name: { type: "string", description: "Agent identifier, e.g. 'pg-fix-issue/coder' or 'pg-apply-change/backend-dev'" },
+          task: { type: "string", description: "The task description for the agent to execute" },
         },
-        async execute(args, ctx) {
+        execute: async (args, ctx) => {
           // Resolve agent definition file
           const agentParts = args.agent_name.split("/");
           const agentFile = path.join(agentDefsDir, ...agentParts) + ".md";
@@ -170,7 +165,7 @@ export const PgSkillsPlugin = async (input) => {
 
           return `${resultText}\n\n<task_metadata>\nsession_id: ${sessionID}\nagent: ${args.agent_name}\nmodel: ${model || "(default)"}\n</task_metadata>`;
         },
-      }),
+      },
     },
   };
 };
