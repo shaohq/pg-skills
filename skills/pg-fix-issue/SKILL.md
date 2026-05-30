@@ -10,7 +10,7 @@ metadata:
 
 # pg-fix-issue
 
-用户描述问题后，主 agent 先规划问题复现步骤，然后通过 Task 工具派遣 `pg-fix-issue/coder` agent 复现问题、收集错误信息、进行系统化诊断、对根因进行修复，coder 返回修复报告后主 agent 检查结果并按模板输出最终结论。
+用户描述问题后，编排器先规划问题复现步骤，然后使用 `pg_dispatch` tool 派遣 `pg-fix-issue/coder` agent 复现问题、收集错误信息、进行系统化诊断、对根因进行修复，coder 返回修复报告后编排器检查结果并按模板输出最终结论。
 
 ## 前置条件
 
@@ -18,63 +18,11 @@ metadata:
 
 ### 1. pg-spec/config.yaml 配置
 
-项目根目录的 `pg-spec/config.yaml` 必须包含 `backend` 和 `frontend` 配置段：
+项目根目录的 `pg-spec/config.yaml` 必须包含 `backend` 和 `frontend` 配置段。
 
-```yaml
-backend:
-  root: <backend-dir>          # 后端项目根目录
-  port: <backend-port>         # 服务端口
-  start: <start-command>        # 启动命令
-  health-check: <health-check>  # 健康检查
-  lint: <lint-command>          # lint 命令
+### 2. agent 定义
 
-frontend:
-  root: <frontend-dir>         # 前端项目根目录
-  port: <frontend-port>        # 服务端口
-  start: <start-command>        # 启动命令
-  health-check: <health-check>  # 健康检查
-  lint: <lint-command>          # lint 命令
-```
-
-### 2. 子 agent 定义
-
-此 SKILL 期望以下子 agent 存在：
-
-| Agent | 角色 |
-|-------|------|
-| `pg-fix-issue/coder` | 复现问题、执行诊断并修复、输出修复报告 |
-
-## 前置条件
-
-使用此 SKILL 的项目必须满足以下条件：
-
-### 1. pg-spec/config.yaml 配置
-
-项目根目录的 `pg-spec/config.yaml` 必须包含 `backend` 和 `frontend` 配置段：
-
-```yaml
-backend:
-  root: <backend-dir>          # 后端项目根目录
-  port: <backend-port>         # 服务端口
-  start: <start-command>        # 启动命令
-  health-check: <health-check>  # 健康检查
-  lint: <lint-command>          # lint 命令
-
-frontend:
-  root: <frontend-dir>         # 前端项目根目录
-  port: <frontend-port>        # 服务端口
-  start: <start-command>        # 启动命令
-  health-check: <health-check>  # 健康检查
-  lint: <lint-command>          # lint 命令
-```
-
-### 2. 子 agent 定义
-
-此 SKILL 期望以下子 agent 存在（由 pg-skills 插件自动提供）：
-
-| Agent | 角色 |
-|-------|------|
-| `pg-fix-issue/coder` | 复现问题、执行诊断并修复、输出修复报告 |
+此 SKILL 依赖 `pg-fix-issue/coder` agent，定义在 pg-skills 插件包的 `agent-defs/pg-fix-issue/coder.md` 中。
 
 ---
 
@@ -166,41 +114,31 @@ question 工具调用：
 
 **必须等待用户明确回复确认，才能进入下一阶段。**
 
-### Phase 4: 派遣 pg-fix-issue/coder agent
+### Phase 4: 派遣 coder agent
 
-使用 Task 工具派遣 `pg-fix-issue/coder` agent，**在 prompt 中附带配置上下文**：
+使用 `pg_dispatch` tool 派遣 `pg-fix-issue/coder` agent，**在 task 参数中附带任务描述和配置上下文**：
 
-```
-Task 工具调用：
-  - description: "复现问题并进行根因修复"
-  - prompt: |
-      FIX ISSUE REQUEST
+```text
+pg_dispatch tool 调用：
+  agent_name: pg-fix-issue/coder
+  task: |
+    FIX ISSUE REQUEST
 
-      - issue_title: <问题标题>
-      - issue_description: <问题描述>
-      - expected_result: <预期结果描述>
-      - reproduction_steps: |
-          1. <步骤 1>
-          2. <步骤 2>
-          ⚠️ 重要：必须真实执行以下步骤，不得以阅读代码代替！
+    - issue_title: <问题标题>
+    - issue_description: <问题描述>
+    - expected_result: <预期结果描述>
+    - reproduction_steps: |
+        1. <步骤 1>
+        2. <步骤 2>
+        ⚠️ 重要：必须真实执行以下步骤，不得以阅读代码代替！
 
-      CONFIG CONTEXT
-      - backend.root: {backend.root}
-      - backend.port: {backend.port}
-      - backend.start: {backend.start}
-      - backend.health-check: {backend.health-check}
-      - backend.lint: {backend.lint}
-      - frontend.root: {frontend.root}
-      - frontend.port: {frontend.port}
-      - frontend.start: {frontend.start}
-      - frontend.health-check: {frontend.health-check}
-      - frontend.lint: {frontend.lint}
-
-      请执行问题复现、诊断、修复并验证修复结果。
-   - subagent_type: "pg-fix-issue/coder"
+    ────────────────────────────────────────
+    请执行问题复现、诊断、修复并验证修复结果。
+    后端配置: {backend.root}/{backend.port}...
+    前端配置: {frontend.root}/{frontend.port}...
 ```
 
-注：`{backend.root}` 等占位符由编排器在调用前替换为实际配置值。
+注：`pg_dispatch` tool 会自动从 `pg-spec/config-model.yaml` 读取 `pg-fix-issue/coder` 的模型配置。`{backend.root}` 等占位符由编排器在调用前替换为实际配置值。
 
 ### Phase 5: 检查修复结果（两步验证法）
 
