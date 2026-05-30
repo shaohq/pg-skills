@@ -39,12 +39,12 @@ CONFIG_PATH = os.path.join(os.getcwd(), "pg-spec/config.yaml")
 # Each workflow only gets the top-level config keys it needs.
 # Add new entries when creating pg-* SKILLs.
 WORKFLOW_KEYS = {
-    "pg-apply-change": ["backend", "frontend", "openapi", "git"],
-    "pg-verify-and-merge": ["backend", "frontend", "git"],
-    "pg-propose": ["context", "rules", "test_strategy", "coding_standards", "backend", "frontend"],
-    "pg-run-e2e": ["backend", "frontend", "e2e", "knownIssues"],
-    "pg-fix-issue": ["backend", "frontend"],
-    "pg-micro-change": ["backend", "frontend", "openapi", "git"],
+    "pg-apply-change": ["scripts", "backend", "frontend", "openapi", "git"],
+    "pg-verify-and-merge": ["scripts", "backend", "frontend", "git"],
+    "pg-propose": ["scripts", "context", "rules", "test_strategy", "coding_standards", "backend", "frontend"],
+    "pg-run-e2e": ["scripts", "backend", "frontend", "e2e", "knownIssues"],
+    "pg-fix-issue": ["scripts", "backend", "frontend"],
+    "pg-micro-change": ["scripts", "backend", "frontend", "openapi", "git"],
 }
 
 

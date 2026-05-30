@@ -6,6 +6,9 @@ schema: spec-driven
 # All SKILLs declare their needs; manager injects values at runtime.
 # ==========================================
 
+scripts:
+  dir: .opencode/scripts
+
 backend:
   root: <backend-dir>
   port: 9080

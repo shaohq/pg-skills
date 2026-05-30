@@ -93,6 +93,7 @@ export const PgSkillsPlugin = async (input) => {
   const projectDir = input.worktree || input.directory;
   const skillsDir = path.join(pgRoot, "skills");
   const agentDefsDir = path.join(pgRoot, "agent-defs");
+  const client = input.client;
 
   return {
     config: async (config) => {
@@ -140,7 +141,7 @@ export const PgSkillsPlugin = async (input) => {
           const fullPrompt = [agentPrompt, "\n\n## Task\n" + args.task].join("\n");
 
           // Create child session
-          const createRes = await ctx.client.session.create({
+          const createRes = await client.session.create({
             body: {
               parentID: ctx.sessionID,
               title: `pg:${args.agent_name}`,
@@ -153,15 +154,15 @@ export const PgSkillsPlugin = async (input) => {
           }
 
           // Send prompt with model
-          if (typeof ctx.client.session.prompt === "function") {
+          if (typeof client.session.prompt === "function") {
             const promptBody = { parts: [{ type: "text", text: fullPrompt }] };
             if (model) promptBody.model = { id: model };
-            await ctx.client.session.prompt({ path: { id: sessionID }, body: promptBody });
+            await client.session.prompt({ path: { id: sessionID }, body: promptBody });
           }
 
           // Wait for completion and read result
-          await waitForCompletion(sessionID, ctx.client);
-          const resultText = await getResultText(sessionID, ctx.client);
+          await waitForCompletion(sessionID, client);
+          const resultText = await getResultText(sessionID, client);
 
           return `${resultText}\n\n<task_metadata>\nsession_id: ${sessionID}\nagent: ${args.agent_name}\nmodel: ${model || "(default)"}\n</task_metadata>`;
         },
