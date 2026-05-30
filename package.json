@@ -2,5 +2,7 @@
   "name": "pg-skills",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
+  "main": ".opencode/plugins/pg.js",
   "description": "PG workflow skills, agents, and commands for OpenCode"
 }
