@@ -28,7 +28,7 @@ metadata:
 
 ### 2. `pg-spec/config.yaml` 统一配置
 
-项目根目录的 `pg-spec/config.yaml` **必须**包含所有项目特定的命令、路径、端口、项目上下文、产物规则。由 `pg_dispatch（自动读取 pg-spec/config.yaml）` 脚本读取（`scriptsDir` 由 config.yaml 的 `scripts.dir` 指定，默认为 `.opencode/scripts`），编排器通过执行该脚本获取配置值。具体格式在下方 [配置约定](#配置约定) 中定义。
+项目根目录的 `pg-spec/config.yaml` **必须**包含所有项目特定的命令、路径、端口、项目上下文、产物规则。编排器直接 Read 该文件获取配置值，无需运行外部脚本。具体格式在下方 [配置约定](#配置约定) 中定义。
 
 ### 3. 子 agent 定义
 
@@ -53,7 +53,7 @@ metadata:
 
 ## 配置约定
 
-项目根目录的 `pg-spec/config.yaml` 是统一配置源，包含所有项目特定的命令、路径、端口、项目上下文、产物规则。编排器在工作流开始时调用 `pg_dispatch（自动读取 pg-spec/config.yaml）` 读取该文件一次，解析后将子 agent 需要的配置值作为上下文传递。**子 agent 不需要自己读取配置文件。**
+项目根目录的 `pg-spec/config.yaml` 是统一配置源，包含所有项目特定的命令、路径、端口、项目上下文、产物规则。编排器直接 Read 该文件获取配置值，解析后传递给子 agent。**子 agent 不需要自己读取配置文件。**
 
 ### 必须的结构
 
@@ -91,10 +91,10 @@ git:
 
 ## 编排器读取配置的策略
 
-**关键设计**：编排器（manager agent）在执行工作流前调用 `pg_dispatch（自动读取 pg-spec/config.yaml）` 获取统一配置 JSON (`scriptsDir` 来自 `pg-spec/config.yaml` 的 `scripts.dir`)。配置值注入到上下文后，编排器从中解析出 Backend、Frontend、OpenAPI、Git、Scripts 五个配置块。之后每次派遣子 agent 时，编排器将对应的配置值作为上下文传递给 agent，**子 agent 不需要自己读取配置文件**。
+**关键设计**：编排器（manager agent）直接 Read `pg-spec/config.yaml` 获取配置。配置值注入到上下文后，编排器从中解析出 Backend、Frontend、OpenAPI、Git 等配置块。之后每次派遣子 agent 时，编排器将对应的配置值作为上下文传递给 agent，**子 agent 不需要自己读取配置文件**。
 
 ```
-工作流开始（编排器执行 pg_dispatch（自动读取 pg-spec/config.yaml） 获取配置）
+工作流开始（编排器 Read pg-spec/config.yaml 获取配置）
   │
   ├→ 解析统一配置
   │   ├→ Scripts config   { dir }
@@ -161,7 +161,7 @@ git:
 ```
 WORKFLOW_FAILED=false
 
-1. 执行 `python3 pg_dispatch（自动读取 pg-spec/config.yaml） pg-apply-change` 获取工作流所需配置（含 `__meta.hostname`）
+1. 直接 Read `pg-spec/config.yaml` 获取工作流所需配置（含 `__meta.hostname`）
 
 2. 读取 pg-spec/changes/<change>/tasks.md 获取任务清单
 
@@ -811,4 +811,4 @@ attempt >4  → WORKFLOW_FAILED=true
 - **会话恢复**：读取 `tasks.md` + `context-chain.md` 确定上次执行位置，从第一个有未完成任务的阶段继续。
 - **编排器不得在派遣 agent 前读取 design/proposal/specs 文件**——agent 自己读取自己的上下文。
 - **Phase D 是唯一编排器自执行阶段**——其他阶段全部派遣子 agent。
-- **编排器通过 `pg_dispatch（自动读取 pg-spec/config.yaml）` 获取统一配置**，无需手动读取。编排器从中提取配置值传递给子 agent，子 agent 不再自己读配置文件。
+- **编排器直接 Read `pg-spec/config.yaml` 获取统一配置**，无需手动读取。编排器从中提取配置值传递给子 agent，子 agent 不再自己读配置文件。

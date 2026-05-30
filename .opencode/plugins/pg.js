@@ -7,7 +7,6 @@
  */
 import path from "path";
 import fs from "fs";
-import { execFileSync } from "child_process";
 import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -120,7 +119,6 @@ export const PgSkillsPlugin = async (input) => {
   const projectDir = input.worktree || input.directory;
   const skillsDir = path.join(pgRoot, "skills");
   const agentDefsDir = path.join(pgRoot, "agent-defs");
-  const scriptsDir = path.join(pgRoot, "scripts");
   const client = input.client;
 
   return {
@@ -159,11 +157,9 @@ export const PgSkillsPlugin = async (input) => {
           }
           const agentPrompt = (match ? match[2] : content).trim();
 
-          // Model: config-model.yaml > frontmatter
           const modelConfig = readModelConfig(projectDir);
           const model = modelConfig[args.agent_name] || frontmatter.model || undefined;
 
-          // Auto-inject project config context
           const projectConfig = readProjectConfig(projectDir);
           const configBlock = Object.keys(projectConfig).length
             ? "\n\n## Project Config\n" + JSON.stringify(projectConfig, null, 2)
@@ -190,30 +186,9 @@ export const PgSkillsPlugin = async (input) => {
           return `${resultText}\n\n<task_metadata>\nsession_id: ${sessionID}\nagent: ${args.agent_name}\nmodel: ${model || "(default)"}\n</task_metadata>`;
         },
       },
-
-      pg_run_script: {
-        description: "Run a Python script from the pg-skills package's scripts/ directory. Returns stdout.",
-        args: {
-          script: { type: "string", description: "Script filename, e.g. 'pg-e2e-parse-results.py'" },
-          args_str: { type: "string", description: "Command-line arguments to pass to the script" },
-        },
-        execute: async (args, ctx) => {
-          const scriptPath = path.join(scriptsDir, args.script);
-          if (!fs.existsSync(scriptPath)) {
-            return `Error: Script "${args.script}" not found at ${scriptPath}`;
-          }
-          try {
-            const result = execFileSync("python3", [scriptPath, ...args.args_str.split(/\s+/)], {
-              cwd: projectDir,
-              encoding: "utf-8",
-              maxBuffer: 10 * 1024 * 1024,
-            });
-            return result;
-          } catch (e) {
-            return `Error running ${args.script}: ${e.stderr || e.message}`;
-          }
-        },
-      },
+    },
+  };
+};
     },
   };
 };

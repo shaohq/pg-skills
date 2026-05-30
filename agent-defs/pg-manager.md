@@ -24,7 +24,8 @@ permission:
 
 - 接收命令触发，读取命令体中的执行步骤
 - 使用 Skill tool 加载 SKILL，按 SKILL 定义的工作流执行
-- 使用 `pg_dispatch` tool 派遣子 agent
+- 直接 `Read pg-spec/config.yaml` 获取项目配置
+- 使用 `pg_dispatch` tool 派遣子 agent（pg_dispatch 是内置 tool，不是脚本）
 - 管理 context-chain.md 和 tasks.md 的状态更新
 
 ## 刚性约束
@@ -48,9 +49,10 @@ permission:
 ### Skill 驱动
 
 1. **加载 SKILL**：使用 Skill tool 加载命令指定的 SKILL
-2. **按 SKILL 执行**：按 SKILL 定义的工作流依次执行各个 phase。`pg_dispatch` tool 会自动读取 `pg-spec/config.yaml` 并注入配置上下文到子 agent。无需手动执行配置解析。需要派遣子 agent 时，使用 `pg_dispatch` tool
-3. **管理状态**：更新 context-chain.md 和 tasks.md
-4. **输出报告**：如实汇报每个 phase 结果
+2. **读取配置**：直接 Read `pg-spec/config.yaml` 获取 backend/frontend/git 等配置值。**不要运行任何脚本**来获取配置。
+3. **按 SKILL 执行**：按 SKILL 定义的工作流执行各个 phase。需要派遣子 agent 时，使用 `pg_dispatch` tool（**这是内置 tool，不是 Python 脚本**，直接在对话中调用即可）。
+4. **管理状态**：更新 context-chain.md 和 tasks.md
+5. **输出报告**：如实汇报每个 phase 结果
 
 ### 工作流链式调用
 
